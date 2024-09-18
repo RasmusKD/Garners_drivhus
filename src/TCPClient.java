@@ -30,6 +30,12 @@ public class TCPClient {
                     break;
                 }
 
+                // Validering af inputformat (f.eks. "luftfugtighed:71.0")
+                if (!sensorData.matches("[a-zA-Z]+:[0-9]+(\\.[0-9]+)?")) {
+                    System.out.println("Fejl: Ugyldigt format. Brug formatet 'sensortype:værdi' (f.eks. 'temperatur:25.5')");
+                    continue;
+                }
+
                 // Send data til serveren
                 writer.println(sensorData);
 

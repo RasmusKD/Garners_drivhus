@@ -1,7 +1,9 @@
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.file.*;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 class ClientHandler implements Runnable {
     private Socket socket;
@@ -11,6 +13,9 @@ class ClientHandler implements Runnable {
     final double LOW_HUMIDITY_THRESHOLD = 30.0;
     final double LOW_SOIL_MOISTURE_THRESHOLD = 20.0;
     final String LOG_FILE = "greenhouse_data.log";
+
+    // Brugervenligt format til tidsstempler
+    final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -28,34 +33,47 @@ class ClientHandler implements Runnable {
             // Læs beskeder fra klienten og håndter dem
             while ((text = reader.readLine()) != null) {
                 System.out.println("Modtaget fra klient: " + text);
-                // Antag at beskeder fra klienten er formateret som "type:værdi" f.eks. "temperatur:25.4"
-                String[] parts = text.split(":");
-                if (parts.length == 2) {
-                    String sensorType = parts[0].toLowerCase();
-                    double sensorValue = Double.parseDouble(parts[1]);
+                try {
+                    // Antag at beskeder fra klienten er formateret som "type:værdi" f.eks. "temperatur:25.4"
+                    String[] parts = text.split(":");
+                    if (parts.length == 2) {
+                        String sensorType = parts[0].toLowerCase();
+                        double sensorValue = Double.parseDouble(parts[1]);
 
-                    // Tjek for tærskeloverskridelser og send en alarm, hvis nødvendigt
-                    String alarmMessage = checkThresholds(sensorType, sensorValue);
+                        // Tjek for tærskeloverskridelser og send en alarm, hvis nødvendigt
+                        String alarmMessage = checkThresholds(sensorType, sensorValue);
 
-                    // Log sensordata med eller uden alarm
-                    logSensorData(sensorType, sensorValue, alarmMessage);
+                        // Log sensordata med eller uden alarm
+                        logSensorData(sensorType, sensorValue, alarmMessage);
 
-                    // Send respons til klienten
-                    if (alarmMessage != null) {
-                        writer.println(alarmMessage);
+                        // Send respons til klienten
+                        if (alarmMessage != null) {
+                            writer.println(alarmMessage);
+                        } else {
+                            writer.println("Data modtaget: " + text);
+                        }
                     } else {
-                        writer.println("Data modtaget: " + text);
+                        writer.println("Ugyldigt format, skal være 'sensortype:værdi'");
                     }
+                } catch (NumberFormatException e) {
+                    writer.println("Ugyldig værdi, skal være et tal. F.eks. 'temperatur:25.4'");
                 }
             }
+        } catch (SocketException ex) {
+            System.out.println("Forbindelsen til klienten blev afbrudt.");
         } catch (IOException ex) {
-            System.out.println("Server fejl: " + ex.getMessage());
-            ex.printStackTrace();
+            System.out.println("Forbindelsesfejl med klient: " + ex.getMessage());
+        } finally {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                System.out.println("Fejl ved lukning af socket: " + e.getMessage());
+            }
         }
     }
 
     private void logSensorData(String sensorType, double value, String alarmMessage) {
-        String logMessage = LocalDateTime.now() + " - " + sensorType + ": " + value;
+        String logMessage = LocalDateTime.now().format(formatter) + " - " + sensorType + ": " + value;
         if (alarmMessage != null) {
             logMessage += " - ALARM: " + alarmMessage;
         }
